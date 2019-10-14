@@ -30,22 +30,52 @@ inThisBuild(
 
 ThisBuild / publishTo := sonatypePublishToBundle.value
 
+lazy val createProductBuilder = taskKey[Unit]("Generate code for ProductBuilder.scala")
+
+createProductBuilder := {
+  val productBuilderFile = (sourceDirectory in zioConfig).value / "main" / "scala" / "zio" / "config" / "ProductBuilder.scala"
+  val resource           = (resourceManaged in Compile).value / "scalaFmt" / "temporary"
+  val scalaFmt           = baseDirectory.value / ".scalafmt.conf"
+
+  ProductBuilderCodeGen.replaceFileSection(
+    productBuilderFile,
+    "productbuilder",
+    ProductBuilderCodeGen.productBuilderCodes :+ "",
+    resource,
+    scalaFmt
+  )
+}
+
 addCommandAlias("fmt", "all scalafmtSbt scalafmt test:scalafmt")
 addCommandAlias("check", "all scalafmtSbtCheck scalafmtCheck test:scalafmtCheck")
 
-lazy val zioConfig = project
-  .in(file("."))
-  .enablePlugins(BuildInfoPlugin)
-  .settings(stdSettings("zio-config"))
-  .settings(
-    testFrameworks := Seq(
-      new TestFramework("org.scalacheck.ScalaCheckFramework"),
-      new TestFramework("zio.test.sbt.ZTestFramework")
+lazy val zioVersion = "1.0.0-RC14"
+
+lazy val root =
+  project
+    .in(file("."))
+    .settings(skip in publish := true)
+    .aggregate(zioConfig, examples)
+
+lazy val zioConfig =
+  module("zio-config")
+    .enablePlugins(BuildInfoPlugin)
+    .settings(buildInfoSettings)
+    .settings(
+      libraryDependencies ++= Seq(
+        "dev.zio" %% "zio-test"     % zioVersion % Test,
+        "dev.zio" %% "zio-test-sbt" % zioVersion % Test
+      ),
+      testFrameworks := Seq(new TestFramework("zio.test.sbt.ZTestFramework"))
     )
-  )
-  .settings(buildInfoSettings)
-  .settings(
-    libraryDependencies ++= Seq(
-      "dev.zio" %% "zio" % "1.0.0-RC13"
+
+lazy val examples = module("examples").dependsOn(zioConfig)
+
+def module(moduleName: String): Project =
+  Project(moduleName, file(moduleName))
+    .settings(stdSettings("zio-config"))
+    .settings(
+      libraryDependencies ++= Seq(
+        "dev.zio" %% "zio" % zioVersion
+      )
     )
-  )
